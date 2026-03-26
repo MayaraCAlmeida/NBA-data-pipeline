@@ -1,5 +1,6 @@
 # Data Cleaning Module
 
+
 import os
 import ssl
 import logging
@@ -226,18 +227,12 @@ def clean_teams_meta(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_player_season_stats(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Agreguei player_gamelogs por (player_id, season_year) para gerar
-    as estatísticas médias e totais da temporada por jogador.
-    Depende do CSV já limpo de player_gamelogs.
-    """
+
     log.info("► player_season_stats")
 
-    # Precisei garantir que season_year existe — veio da coluna SEASON_YEAR do raw
+    # Garante season_year
     if "season_year" not in df.columns and "SEASON_YEAR" in df.columns:
         df = df.rename(columns={"SEASON_YEAR": "season_year"})
-
-    # Se ainda não existir (gamelogs já processados sem a coluna), injeta fixo
     if "season_year" not in df.columns:
         df["season_year"] = "2024-25"
         log.warning("  season_year não encontrado — usando '2024-25' como padrão")
@@ -257,77 +252,98 @@ def build_player_season_stats(df: pd.DataFrame) -> pd.DataFrame:
         "turnovers",
         "steals",
         "blocks",
-        "blocked_att",
-        "fouls",
-        "fouls_drawn",
         "points",
         "plus_minus",
+        # métricas derivadas calculadas no clean_player_gamelogs / pipeline
+        "true_shooting_pct",
+        "ast_to_tov_ratio",
+        "game_score",
+        "impact_score",
     ]
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # Calcula métricas derivadas se não existirem no CSV
+    if "true_shooting_pct" not in df.columns:
+        denom = 2 * (df["fg_attempts"] + 0.44 * df["ft_attempts"])
+        df["true_shooting_pct"] = df["points"] / denom.replace(0, float("nan"))
+
+    if "ast_to_tov_ratio" not in df.columns:
+        df["ast_to_tov_ratio"] = df["assists"] / df["turnovers"].replace(
+            0, float("nan")
+        )
+
+    if "game_score" not in df.columns:
+        df["game_score"] = (
+            df["points"]
+            + 0.4 * df["fg_made"]
+            - 0.7 * df["fg_attempts"]
+            - 0.4 * (df["ft_attempts"] - df["ft_made"])
+            + 0.7 * df["off_rebounds"]
+            + 0.3 * df["def_rebounds"]
+            + df["steals"]
+            + 0.7 * df["assists"]
+            + 0.7 * df["blocks"]
+            - 0.4 * df.get("fouls", 0)
+            - df["turnovers"]
+        )
+
+    if "impact_score" not in df.columns:
+        df["impact_score"] = df["game_score"] + df["plus_minus"]
+
     grp = df.groupby(["player_id", "season_year"])
 
     agg = grp.agg(
         player_name=("player_name", "last"),
-        team_abbr=("team_abbr", "last"),  # time mais recente
+        team_abbr=("team_abbr", "last"),
         games_played=("game_id", "count"),
         wins=("is_win", "sum"),
-        minutes_per_game=("minutes", "mean"),
-        points_per_game=("points", "mean"),
-        rebounds_per_game=("rebounds", "mean"),
-        assists_per_game=("assists", "mean"),
-        steals_per_game=("steals", "mean"),
-        blocks_per_game=("blocks", "mean"),
-        turnovers_per_game=("turnovers", "mean"),
-        fg_made_per_game=("fg_made", "mean"),
-        fg_attempts_per_game=("fg_attempts", "mean"),
-        fg3_made_per_game=("fg3_made", "mean"),
-        fg3_attempts_per_game=("fg3_attempts", "mean"),
-        ft_made_per_game=("ft_made", "mean"),
-        ft_attempts_per_game=("ft_attempts", "mean"),
-        plus_minus_per_game=("plus_minus", "mean"),
-        total_points=("points", "sum"),
-        total_rebounds=("rebounds", "sum"),
-        total_assists=("assists", "sum"),
+        avg_minutes=("minutes", "mean"),
+        avg_points=("points", "mean"),
+        avg_assists=("assists", "mean"),
+        avg_rebounds=("rebounds", "mean"),
+        avg_steals=("steals", "mean"),
+        avg_blocks=("blocks", "mean"),
+        avg_turnovers=("turnovers", "mean"),
+        avg_plus_minus=("plus_minus", "mean"),
+        avg_ts_pct=("true_shooting_pct", "mean"),
+        avg_ast_tov=("ast_to_tov_ratio", "mean"),
+        avg_impact_score=("impact_score", "mean"),
+        avg_game_score=("game_score", "mean"),
+        max_points=("points", "max"),
+        max_impact=("impact_score", "max"),
+        std_points=("points", "std"),
     ).reset_index()
 
-    # Percentuais calculados a partir dos totais (mais precisos que média de médias)
-    fg_totals = grp[
-        ["fg_made", "fg_attempts", "fg3_made", "fg3_attempts", "ft_made", "ft_attempts"]
-    ].sum()
-    agg = agg.merge(
-        fg_totals.rename(
-            columns={
-                "fg_made": "_fg_made_tot",
-                "fg_attempts": "_fg_att_tot",
-                "fg3_made": "_fg3_made_tot",
-                "fg3_attempts": "_fg3_att_tot",
-                "ft_made": "_ft_made_tot",
-                "ft_attempts": "_ft_att_tot",
-            }
-        ).reset_index(),
-        on=["player_id", "season_year"],
+    # win_rate e consistency_score
+    agg["win_rate"] = (agg["wins"] / agg["games_played"]).round(4)
+    agg["consistency_score"] = (1 / (1 + agg["std_points"])).round(4)
+
+    # impact_rank dentro de cada season_year
+    agg["impact_rank"] = (
+        agg.groupby("season_year")["avg_impact_score"]
+        .rank(ascending=False, method="min")
+        .astype(int)
     )
 
-    agg["fg_pct"] = (
-        agg["_fg_made_tot"] / agg["_fg_att_tot"].replace(0, float("nan"))
-    ).round(3)
-    agg["fg3_pct"] = (
-        agg["_fg3_made_tot"] / agg["_fg3_att_tot"].replace(0, float("nan"))
-    ).round(3)
-    agg["ft_pct"] = (
-        agg["_ft_made_tot"] / agg["_ft_att_tot"].replace(0, float("nan"))
-    ).round(3)
-    agg["win_pct"] = (agg["wins"] / agg["games_played"]).round(3)
-
-    # Remove colunas auxiliares
-    agg = agg.drop(columns=[c for c in agg.columns if c.startswith("_")])
-
-    # Arredonda médias para 2 casas
-    mean_cols = [c for c in agg.columns if c.endswith("_per_game")]
-    agg[mean_cols] = agg[mean_cols].round(2)
+    # Arredonda
+    round2 = [
+        "avg_minutes",
+        "avg_points",
+        "avg_assists",
+        "avg_rebounds",
+        "avg_steals",
+        "avg_blocks",
+        "avg_turnovers",
+        "avg_plus_minus",
+    ]
+    agg[round2] = agg[round2].round(2)
+    agg["avg_ts_pct"] = agg["avg_ts_pct"].round(4)
+    agg["avg_ast_tov"] = agg["avg_ast_tov"].round(3)
+    agg["avg_impact_score"] = agg["avg_impact_score"].round(4)
+    agg["avg_game_score"] = agg["avg_game_score"].round(4)
+    agg["std_points"] = agg["std_points"].round(4)
 
     log.info(f"  → {len(agg)} linhas")
     return agg
@@ -360,7 +376,7 @@ def run():
             log.error(f"  ✘ {name}: {e}")
 
     # player_season_stats é derivado dos gamelogs já processados,
-    # não de um arquivo raw — por isso tratei separadamente.
+    # não de um arquivo raw — por isso tratado separadamente.
     try:
         processed_gamelogs = os.path.join(PROCESSED_DIR, "player_gamelogs.csv")
         df_gl = pd.read_csv(processed_gamelogs, index_col=False)
