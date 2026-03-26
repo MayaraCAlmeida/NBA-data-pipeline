@@ -1,7 +1,6 @@
-"""
-NBA Data Pipeline - Automation Scheduler
-instalar dependências: pip install apscheduler nba_api pandas numpy scipy sqlalchemy psycopg2-binary python-dotenv
-"""
+# Scheduler
+# instalar dependências: 
+# pip install apscheduler nba_api pandas numpy scipy sqlalchemy psycopg2-binary python-dotenv
 
 import sys
 import logging
@@ -9,19 +8,18 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-# Adiciona a pasta atual ao path (todos os modulos estao na mesma pasta)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-# --- Logger ------------------------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(
-            str(Path(__file__).resolve().parent / "pipeline.log"), encoding="utf-8"
+            Path(__file__).resolve().parent / "pipeline.log", encoding="utf-8"
         ),
         logging.StreamHandler(),
     ],
@@ -29,92 +27,66 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# --- Pipeline ----------------------------------------------------------------
-def run_full_pipeline():
-    """Executa o pipeline completo de dados NBA."""
+def run_pipeline():
     start = datetime.now()
-    log.info("=" * 60)
-    log.info(f"NBA Pipeline iniciado em {start.strftime('%Y-%m-%d %H:%M:%S')}")
-    log.info("=" * 60)
+    log.info("=" * 50)
+    log.info(f"pipeline iniciado — {start:%Y-%m-%d %H:%M:%S}")
 
-    try:
-        # Step 1 - Extract
-        log.info("[1/4] Extraindo dados...")
-        from extract_data import run
+    steps = [
+        ("extract_data", "extraindo dados"),
+        ("clean_data", "limpando dados"),
+        ("transform_data", "calculando métricas"),
+        ("load_database", "carregando no banco"),
+    ]
 
-        run()
+    for i, (module_name, label) in enumerate(steps, 1):
+        log.info(f"[{i}/{len(steps)}] {label}...")
+        try:
+            module = __import__(module_name)
+            module.run()
+        except ImportError as e:
+            log.error(f"módulo '{module_name}' não encontrado: {e}")
+            return
+        except Exception as e:
+            log.error(f"falha em '{module_name}': {e}", exc_info=True)
+            return
 
-        # Step 2 - Clean
-        log.info("[2/4] Limpando dados...")
-        from clean_data import run
-
-        run()
-
-        # Step 3 - Transform
-        log.info("[3/4] Transformando & calculando metricas...")
-        from transform_data import run
-
-        run()
-
-        # Step 4 - Load
-        log.info("[4/4] Carregando no banco de dados...")
-        from load_database import run
-
-        run()
-
-        elapsed = (datetime.now() - start).seconds
-        log.info(f"Pipeline concluido com sucesso em {elapsed}s")
-
-    except Exception as e:
-        log.error(f"Pipeline FALHOU: {e}", exc_info=True)
-        raise
+    elapsed = (datetime.now() - start).total_seconds()
+    log.info(f"pipeline finalizado em {elapsed:.1f}s")
 
 
-# --- Scheduler ---------------------------------------------------------------
-def start_scheduler(hour: int = 6, minute: int = 0):
-    """
-    Agenda o pipeline para rodar todo dia as {hour}:{minute}.
-    Padrao: 06:00 AM -- logo apos os jogos noturnos terminarem.
-    """
-    scheduler = BlockingScheduler(timezone="America/New_York")
+def start_scheduler(hour: int, minute: int):
+    import os
 
+    tz = os.getenv("PIPELINE_TZ", "America/New_York")
+
+    scheduler = BlockingScheduler(timezone=tz)
     scheduler.add_job(
-        run_full_pipeline,
+        run_pipeline,
         trigger=CronTrigger(hour=hour, minute=minute),
-        id="nba_daily_pipeline",
-        name="NBA Daily Pipeline",
+        id="nba_pipeline",
         replace_existing=True,
         misfire_grace_time=3600,
     )
 
-    log.info(
-        f"Scheduler iniciado -- pipeline roda diariamente as {hour:02d}:{minute:02d} ET"
-    )
-    log.info("   Pressione Ctrl+C para parar.")
+    log.info(f"agendado para {hour:02d}:{minute:02d} ({tz}) — Ctrl+C para parar")
 
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        log.info("Scheduler encerrado.")
+        log.info("scheduler encerrado")
 
 
-# --- Entry Point -------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="NBA Data Pipeline Scheduler")
+    parser = argparse.ArgumentParser(description="NBA pipeline scheduler")
+    parser.add_argument("--run-now", action="store_true", help="roda o pipeline agora")
+    parser.add_argument("--hour", type=int, default=6, help="hora de execução (0–23)")
     parser.add_argument(
-        "--run-now",
-        action="store_true",
-        help="Executa o pipeline uma vez imediatamente",
-    )
-    parser.add_argument(
-        "--hour", type=int, default=6, help="Hora para rodar diariamente (ET, 0-23)"
-    )
-    parser.add_argument(
-        "--minute", type=int, default=0, help="Minuto para rodar diariamente (0-59)"
+        "--minute", type=int, default=0, help="minuto de execução (0–59)"
     )
     args = parser.parse_args()
 
     if args.run_now:
-        run_full_pipeline()
+        run_pipeline()
     else:
-        start_scheduler(hour=args.hour, minute=args.minute)
+        start_scheduler(args.hour, args.minute)
