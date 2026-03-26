@@ -1,8 +1,6 @@
-"""
-NBA Data Pipeline — Dashboard Generator
-Puxa dados reais do PostgreSQL e gera nba_dashboard.html atualizado.
-
-"""
+# Dashboard Generator
+# Puxa dados reais do PostgreSQL e gera nba_dashboard.html atualizado.
+# só clicar que abre no navegador
 
 import os
 import json
@@ -16,7 +14,7 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-### Conexão
+# Conexão
 def get_engine():
     db_url = (
         f"postgresql+psycopg2://{os.getenv('DB_USER','postgres')}:"
@@ -28,7 +26,7 @@ def get_engine():
     return create_engine(db_url, pool_pre_ping=True)
 
 
-### Queries
+# Queries
 def fetch_players(conn):
     rows = conn.execute(
         text(
@@ -229,7 +227,7 @@ def fetch_impact_distribution(conn):
     return [dict(r._mapping) for r in rows]
 
 
-### Gerador de HTML
+# Gerador de HTML
 def generate_html(
     players,
     teams,
@@ -816,7 +814,7 @@ buildTopGamesTable();
     return html
 
 
-### Main
+# Main
 def run():
     print("Conectando ao banco...")
     engine = get_engine()
