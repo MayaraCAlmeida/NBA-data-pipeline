@@ -1,4 +1,5 @@
---  NBA — Schema completo
+
+--  Schema completo
 
 --  Dimensões
 
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS players (
 
 
 --  Jogos (resultado por time)
+
 
 CREATE TABLE IF NOT EXISTS games (
     team_id    BIGINT        NOT NULL,
@@ -190,18 +192,31 @@ CREATE TABLE IF NOT EXISTS league_leaders (
 
 CREATE INDEX IF NOT EXISTS idx_leaders_category ON league_leaders (season_year, stat_category, rank);
 
-
-
-
------------------------------------------
-
 SELECT schemaname, tablename 
 FROM pg_tables 
 WHERE tablename = 'games';
 
+
+
+---- VIEW
+CREATE VIEW vw_team_performance AS
+SELECT
+    team_abbr,
+    COUNT(*)                      AS games_played,
+    SUM(is_win)                   AS wins,
+    COUNT(*) - SUM(is_win)        AS losses,
+    ROUND(100.0 * AVG(is_win), 1) AS win_pct,
+    ROUND(AVG(points), 1)         AS avg_points,
+    ROUND(AVG(point_diff), 1)     AS avg_margin
+FROM games
+GROUP BY team_abbr;
+
+
+------- DROP
 DROP TABLE IF EXISTS league_leaders;
 DROP TABLE IF EXISTS player_season_stats;
 DROP TABLE IF EXISTS player_gamelogs;
 DROP TABLE IF EXISTS games CASCADE;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS teams;
+DROP VIEW  IF EXISTS vw_team_performance;
