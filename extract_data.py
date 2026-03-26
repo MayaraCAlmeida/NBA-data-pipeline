@@ -1,7 +1,4 @@
-"""
-NBA Data Pipeline - Data Extraction Module
-
-"""
+# Data Extraction Module
 
 import os
 import ssl
@@ -20,7 +17,7 @@ from nba_api.stats.endpoints import (
 )
 from nba_api.stats.static import players, teams
 
-# ─── Config ──────────────────────────────────────────────────────────────────
+# Config
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_DIR = os.path.join(BASE_DIR, "dados_brutos")
 os.makedirs(RAW_DIR, exist_ok=True)
@@ -40,7 +37,7 @@ SEASON_TYPE = "Regular Season"
 DELAY = 1.0  # segundos entre requests (respeita rate limit)
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# Helpers
 def save_raw(df: pd.DataFrame, name: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d")
     path = os.path.join(RAW_DIR, f"{name}_{timestamp}.csv")
@@ -62,7 +59,7 @@ def safe_request(func, *args, retries=3, **kwargs):
     raise RuntimeError(f"Falhou após {retries} tentativas")
 
 
-# ─── Funções de extração ──────────────────────────────────────────────────────
+# Funções de extração
 def extract_players_meta() -> pd.DataFrame:
     log.info("► Jogadores ativos (metadata)...")
     df = pd.DataFrame(players.get_active_players())
@@ -122,7 +119,7 @@ def extract_league_leaders() -> pd.DataFrame:
     return result
 
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# Main
 def run():
     log.info("=" * 55)
     log.info(f"  NBA Pipeline — Temporada: {SEASON}")
