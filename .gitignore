@@ -1,19 +1,20 @@
 # Credenciais e variáveis de ambiente
 .env
+.env.*
 
-# Dados brutos e processados (muito pesados para o repositório)
+# Dados brutos e processados
 dados_brutos/
 dados_processados/
 data/
 
 # Logs
 *.log
+logs/
 
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
-.Python
 *.egg-info/
 dist/
 build/
