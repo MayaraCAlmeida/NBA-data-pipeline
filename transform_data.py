@@ -1,7 +1,4 @@
-"""
-NBA Data Pipeline - Transformation & Feature Engineering Module
-
-"""
+# Transformation & Feature Engineering Module
 
 import os
 import ssl
@@ -12,7 +9,7 @@ from scipy import stats
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# ─── Config ──────────────────────────────────────────────────────────────────
+# Configurações
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROCESSED_DIR = os.path.join(BASE_DIR, "dados_processados")
 os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -28,7 +25,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# ─── Métricas avançadas ───────────────────────────────────────────────────────
+# Métricas avançadas
 def compute_true_shooting(pts, fga, fta):
     """True Shooting % — mede eficiência de arremesso real."""
     tsa = fga + 0.44 * fta
@@ -81,7 +78,7 @@ def compute_game_score(pts, fgm, fga, ftm, fta, oreb, dreb, ast, stl, blk, pf, t
     )
 
 
-# ─── Detecção de outliers ─────────────────────────────────────────────────────
+# Detecção de outliers
 def flag_outlier_games(
     df: pd.DataFrame, col: str, threshold: float = 2.5
 ) -> pd.DataFrame:
@@ -94,7 +91,7 @@ def flag_outlier_games(
     return df
 
 
-# ─── Rolling stats ────────────────────────────────────────────────────────────
+# Rolling stats
 def add_rolling_stats(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     """Adiciona médias móveis dos últimos N jogos por jogador."""
     df = df.sort_values(["player_id", "game_date"])
@@ -106,7 +103,7 @@ def add_rolling_stats(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     return df
 
 
-# ─── Agregados da temporada ───────────────────────────────────────────────────
+# Agregados da temporada
 def build_player_season_stats(df: pd.DataFrame) -> pd.DataFrame:
     """Agrega estatísticas da temporada por jogador."""
     agg = (
@@ -133,6 +130,7 @@ def build_player_season_stats(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
+    agg["season_year"] = "2024-25"
     agg["win_rate"] = agg["wins"] / agg["games_played"]
     agg["consistency_score"] = 1 / (1 + agg["std_points"])
     agg["impact_rank"] = agg["avg_impact_score"].rank(ascending=False).astype(int)
@@ -140,7 +138,7 @@ def build_player_season_stats(df: pd.DataFrame) -> pd.DataFrame:
     return agg.sort_values("avg_impact_score", ascending=False)
 
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# Main
 def run():
     log.info("=" * 55)
     log.info("  NBA Pipeline — Transformação & Feature Engineering")
@@ -200,18 +198,18 @@ def run():
     season_stats = build_player_season_stats(df)
 
     log.info("► Salvando...")
-    enriched_path = os.path.join(PROCESSED_DIR, "player_gamelogs_enriched.csv")
+    gamelogs_path = os.path.join(PROCESSED_DIR, "player_gamelogs.csv")
     season_path = os.path.join(PROCESSED_DIR, "player_season_stats.csv")
-    df.to_csv(enriched_path, index=False, encoding="utf-8")
+    df.to_csv(gamelogs_path, index=False, encoding="utf-8")
     season_stats.to_csv(season_path, index=False, encoding="utf-8")
-    log.info(f"  ✔ player_gamelogs_enriched.csv  ({len(df)} linhas)")
-    log.info(f"  ✔ player_season_stats.csv       ({len(season_stats)} jogadores)")
+    log.info(f"  ✔ player_gamelogs.csv      ({len(df)} linhas)")
+    log.info(f"  ✔ player_season_stats.csv  ({len(season_stats)} jogadores)")
 
     log.info("=" * 55)
     log.info("  Concluído.")
     log.info("=" * 55)
 
-    return {"gamelogs_enriched": df, "season_stats": season_stats}
+    return {"gamelogs": df, "season_stats": season_stats}
 
 
 if __name__ == "__main__":
