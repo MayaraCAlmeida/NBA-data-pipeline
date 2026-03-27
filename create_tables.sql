@@ -1,6 +1,15 @@
 
 --  Schema completo
 
+------- DROP
+DROP TABLE IF EXISTS league_leaders;
+DROP TABLE IF EXISTS player_season_stats;
+DROP TABLE IF EXISTS player_gamelogs;
+DROP TABLE IF EXISTS games CASCADE;
+DROP TABLE IF EXISTS players;
+DROP TABLE IF EXISTS teams;
+DROP VIEW  IF EXISTS vw_team_performance;
+
 --  Dimensões
 
 CREATE TABLE IF NOT EXISTS teams (
@@ -210,13 +219,3 @@ SELECT
     ROUND(AVG(point_diff), 1)     AS avg_margin
 FROM games
 GROUP BY team_abbr;
-
-
-------- DROP
-DROP TABLE IF EXISTS league_leaders;
-DROP TABLE IF EXISTS player_season_stats;
-DROP TABLE IF EXISTS player_gamelogs;
-DROP TABLE IF EXISTS games CASCADE;
-DROP TABLE IF EXISTS players;
-DROP TABLE IF EXISTS teams;
-DROP VIEW  IF EXISTS vw_team_performance;
