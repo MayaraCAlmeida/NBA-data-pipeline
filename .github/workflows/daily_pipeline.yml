@@ -21,6 +21,31 @@ jobs:
       - name: instalar dependências
         run: pip install -r requirements.txt
 
+      - name: criar tabelas
+        env:
+          DB_HOST:     ${{ secrets.NBA_DB_HOST }}
+          DB_PORT:     ${{ secrets.NBA_DB_PORT }}
+          DB_NAME:     ${{ secrets.NBA_DB_NAME }}
+          DB_USER:     ${{ secrets.NBA_DB_USER }}
+          DB_PASSWORD: ${{ secrets.NBA_DB_PASSWORD }}
+        run: |
+          python - <<'EOF'
+          import os, psycopg2
+          conn = psycopg2.connect(
+              host=os.environ["DB_HOST"],
+              port=os.environ["DB_PORT"],
+              dbname=os.environ["DB_NAME"],
+              user=os.environ["DB_USER"],
+              password=os.environ["DB_PASSWORD"],
+              sslmode="require"
+          )
+          cur = conn.cursor()
+          cur.execute(open("create_tables.sql").read())
+          conn.commit()
+          conn.close()
+          print("tabelas criadas")
+          EOF
+
       - name: rodar pipeline
         env:
           DB_HOST:     ${{ secrets.NBA_DB_HOST }}
