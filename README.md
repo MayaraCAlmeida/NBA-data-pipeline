@@ -1,4 +1,4 @@
-# NBA pipeline
+# NBA Performance Monitor
 
 Pipeline ETL que coleta estatísticas da NBA direto da API oficial, calcula métricas avançadas e gera um dashboard interativo. Roda automaticamente todo dia — sem precisar fazer nada manualmente.
 
@@ -100,7 +100,7 @@ Gerado pelo `generate_dashboard.py` com dados reais do banco. Tem 4 abas:
 ## Configuração
 
 ```bash
-pip install apscheduler nba_api pandas numpy scipy sqlalchemy psycopg2-binary python-dotenv
+pip install -r requirements.txt
 ```
 
 ```bash
@@ -116,7 +116,7 @@ DB_USER=postgres
 DB_PASSWORD=sua_senha
 ```
 
-> O `.env` já está no `.gitignore`.
+> O `.env` já está no `.gitignore`. Para rodar via GitHub Actions, o banco precisa ser acessível pela internet — o projeto usa [Neon](https://neon.tech).
 
 Antes de rodar pela primeira vez, cria as tabelas no banco:
 ```bash
@@ -149,15 +149,15 @@ Pra mudar o horário:
 python scheduler.py --hour 7 --minute 30
 ```
 
-**Na nuvem** — o `daily_pipeline.yml` faz a mesma coisa via GitHub Actions. Coloca as credenciais do banco em `Settings → Secrets → Actions`:
+**Na nuvem** — o `daily_pipeline.yml` faz a mesma coisa via GitHub Actions. Coloca as credenciais do banco em `Settings → Secrets and variables → Actions`:
 
 | Secret | Valor |
 |---|---|
-| `DB_HOST` | host do banco em nuvem |
-| `DB_PORT` | 5432 |
-| `DB_NAME` | nba_pipeline |
-| `DB_USER` | seu usuário |
-| `DB_PASSWORD` | sua senha |
+| `NBA_DB_HOST` | host do banco em nuvem |
+| `NBA_DB_PORT` | 5432 |
+| `NBA_DB_NAME` | neondb |
+| `NBA_DB_USER` | neondb_owner |
+| `NBA_DB_PASSWORD` | sua senha |
 
 ---
 
