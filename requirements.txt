@@ -1,0 +1,8 @@
+apscheduler
+nba_api
+pandas
+numpy
+scipy
+sqlalchemy
+psycopg2-binary
+python-dotenv
