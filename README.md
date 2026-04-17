@@ -1,113 +1,79 @@
-# NBA Performance Monitor
+# NBA Performance Monitor — ETL & Dashboard Analítico
 
-Pipeline ETL que coleta estatísticas da NBA direto da API oficial, calcula métricas avançadas e gera um dashboard interativo. Roda automaticamente todo dia — sem precisar fazer nada manualmente.
+## Visão Geral
 
----
+Este projeto implementa um pipeline ETL completo para coleta automática de estatísticas da NBA via API oficial, cálculo de métricas avançadas de desempenho e geração de um dashboard interativo com dados reais. O pipeline é orquestrado localmente ou via GitHub Actions, rodando diariamente de forma totalmente autônoma.
 
-## Fluxo
+### Módulos do Pipeline
 
-```
-extract_data.py       →  API da NBA  →  dados_brutos/
-clean_data.py         →  dados_brutos/  →  dados_processados/
-transform_data.py     →  métricas, outliers, rolling  →  dados_processados/
-load_database.py      →  dados_processados/  →  PostgreSQL
-generate_dashboard.py →  PostgreSQL  →  nba_dashboard.html
-```
+| Módulo                   | Descrição                                                                                      |
+|--------------------------|-----------------------------------------------------------------------------------------------|
+| **Extração**             | Coleta game logs, líderes e resultados da API oficial com retry e respeito ao rate limit       |
+| **Limpeza**              | Padroniza colunas, converte tipos, remove registros inválidos e deduplica                      |
+| **Transformação**        | Calcula Impact Score, True Shooting %, Game Score, Z-score e rolling averages                  |
+| **Carga**                | Upsert no PostgreSQL com validação de FKs antes de subir                                       |
+| **Dashboard**            | Gera `nba_dashboard.html` interativo com 4 abas diretamente do banco                           |
 
----
+### Fluxo de Processamento
 
-## Arquivos
-
-| Arquivo | O que faz |
-|---|---|
-| `extract_data.py` | Busca game logs, líderes (PTS/AST/REB/STL/BLK), resultados e metadata. Retry automático, respeita o rate limit da API |
-| `clean_data.py` | Renomeia colunas pra snake_case, converte tipos, remove jogos sem minutos, cria `is_win` e `is_home`, deduplica |
-| `transform_data.py` | Calcula Impact Score, True Shooting %, Game Score, usage proxy, Z-score por jogador, rolling de 5 e 10 jogos |
-| `load_database.py` | Upsert no PostgreSQL — insere novos registros e atualiza os existentes. Valida FKs antes de subir |
-| `create_tables.sql` | Cria as 5 tabelas e a view `vw_team_performance`. Idempotente (`IF NOT EXISTS`) |
-| `analytics_queries.sql` | 10 queries prontas pra usar no banco ou em qualquer ferramenta de BI |
-| `generate_dashboard.py` | Conecta no banco, puxa os dados reais e regera o `nba_dashboard.html` |
-| `nba_dashboard.html` | Dashboard interativo com 4 abas — abre direto no navegador |
-| `scheduler.py` | Orquestra o pipeline local. Suporta execução imediata (`--run-now`) ou agendamento diário |
-| `daily_pipeline.yml` | GitHub Actions — mesma coisa, mas na nuvem, sem precisar do PC ligado |
-| `.env.example` | Template das variáveis do banco |
+1. **Extração** (`extract_data.py`) — Busca dados da API da NBA e salva em `dados_brutos/`
+2. **Limpeza** (`clean_data.py`) — Normaliza e valida os dados brutos em `dados_processados/`
+3. **Transformação** (`transform_data.py`) — Calcula métricas avançadas, outliers e rolling averages
+4. **Carga** (`load_database.py`) — Realiza upsert no PostgreSQL com validação de integridade
+5. **Dashboard** (`generate_dashboard.py`) — Lê o banco e regera o `nba_dashboard.html`
 
 ---
 
-## Métricas calculadas
-
-**Impact Score** — resume o impacto do jogador num número só:
-```
-(PTS×0.35) + (AST×0.20) + (REB×0.20) + (STL×0.12) + (BLK×0.08) − (TOV×0.15)
-```
-
-**True Shooting %** — eficiência real de arremesso, contando lances livres e três pontos:
-```
-PTS / (2 × (FGA + 0.44 × FTA))
-```
-
-**Game Score** (Hollinger) — nota geral do jogo:
-```
-PTS + 0.4×FGM − 0.7×FGA − 0.4×(FTA−FTM) + 0.7×OREB + 0.3×DREB + STL + 0.7×AST + 0.7×BLK − 0.4×PF − TOV
-```
-
-Além disso: Z-score por jogador pra detectar jogos fora da curva (threshold > 2.5) e rolling averages dos últimos 5 e 10 jogos para pontos, assistências, rebotes e impact score.
-
----
-
-## Banco de dados
-
-5 tabelas + 1 view:
-
-- `teams` — metadata dos times
-- `players` — metadata dos jogadores ativos
-- `games` — resultado por time/jogo
-- `player_gamelogs` — box score completo + métricas derivadas por jogo
-- `player_season_stats` — agregados da temporada por jogador
-- `league_leaders` — snapshot dos líderes por categoria
-- `vw_team_performance` — view com win rate, pontuação média e saldo por time
-
----
-
-## Dashboard
-
-Gerado pelo `generate_dashboard.py` com dados reais do banco. Tem 4 abas:
-
-- **Overview** — KPIs gerais, top 50 por Impact Score, tier dos jogadores (Elite / High Impact / Consistent / Developing)
-- **Players** — perfil individual com radar chart e tendência de forma
-- **Teams** — classificação por win rate, pontuação e saldo de pontos
-- **Trends** — evolução mensal e distribuição de Impact Score
-
----
-
-## Queries prontas
-
-`analytics_queries.sql` tem 10 queries pra rodar direto:
-
-1. Top 20 por Impact Score (mín. 10 jogos)
-2. Evolução de pontos — rolling 5 e 10 dos top 10
-3. Home vs away por time
-4. Jogos fora da curva — Z-score > 2.5
-5. True Shooting Top 30 (mín. 15 jogos)
-6. Ranking de times na temporada
-7. Quadrante consistência vs produção (Elite / High Impact / Consistent / Developing)
-8. Head-to-head entre dois jogadores — troca os nomes antes de rodar
-9. Melhores jogos individuais da temporada por Game Score
-10. Tendência mensal dos top 5
-
----
-
-## Configuração
+### Dependências
 
 ```bash
 pip install -r requirements.txt
 ```
 
+Dependências principais:
+
+- `nba_api` — Fonte de dados oficial da NBA
+- `pandas` + `numpy` — Transformação e manipulação de dados
+- `scipy` — Cálculo de Z-score e detecção de outliers
+- `sqlalchemy` — Conexão com PostgreSQL e upsert
+- `apscheduler` — Agendamento local do pipeline
+- `psycopg2-binary` — Driver PostgreSQL para Python
+
+**Requisitos de ambiente:**
+
+- Python >= 3.11
+- PostgreSQL >= 16
+
+---
+
+## Estrutura do Projeto
+
+```plaintext
+.
+├── extract_data.py           # Extração da API da NBA com retry e rate limit
+├── clean_data.py             # Limpeza, normalização e deduplicação
+├── transform_data.py         # Métricas avançadas, Z-score e rolling averages
+├── load_database.py          # Upsert no PostgreSQL com validação de FKs
+├── generate_dashboard.py     # Geração do dashboard HTML a partir do banco
+├── scheduler.py              # Orquestrador local com agendamento diário
+├── create_tables.sql         # DDL das 5 tabelas e view (idempotente)
+├── analytics_queries.sql     # 10 queries analíticas prontas para uso
+├── nba_dashboard.html        # Dashboard interativo — abre direto no navegador
+├── daily_pipeline.yml        # GitHub Actions — automação na nuvem
+├── .env.example              # Template das variáveis de ambiente
+└── .env                      # Variáveis de ambiente (não versionado)
+```
+
+---
+
+## Configuração
+
+### Variáveis de Ambiente (`.env`)
+
 ```bash
 cp .env.example .env
 ```
 
-`.env`:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
@@ -116,22 +82,27 @@ DB_USER=postgres
 DB_PASSWORD=sua_senha
 ```
 
-> O `.env` já está no `.gitignore`. Para rodar via GitHub Actions, o banco precisa ser acessível pela internet — o projeto usa [Neon](https://neon.tech).
+> O `.env` está no `.gitignore` e não é versionado. Para rodar via GitHub Actions, o banco precisa ser acessível pela internet — o projeto utiliza [Neon](https://neon.tech).
 
-Antes de rodar pela primeira vez, cria as tabelas no banco:
+---
+
+## Execução
+
+### 1. Criar as tabelas no banco
+
 ```bash
 psql -U postgres -d nba_pipeline -f create_tables.sql
 ```
 
----
-
-## Rodando
+### 2. Rodar o pipeline completo
 
 ```bash
-# pipeline completo
 python scheduler.py --run-now
+```
 
-# só o dashboard (banco já tem dados)
+### 3. Gerar apenas o dashboard (banco já populado)
+
+```bash
 python generate_dashboard.py
 ```
 
@@ -139,37 +110,167 @@ python generate_dashboard.py
 
 ## Agendamento
 
-**Local** — deixa rodando e ele dispara todo dia às 06:00 ET:
+### Local
+
+Mantém o pipeline rodando e dispara automaticamente todo dia às 06:00 ET:
+
 ```bash
 python scheduler.py
 ```
 
-Pra mudar o horário:
+Para customizar o horário:
+
 ```bash
 python scheduler.py --hour 7 --minute 30
 ```
 
-**Na nuvem** — o `daily_pipeline.yml` faz a mesma coisa via GitHub Actions. Coloca as credenciais do banco em `Settings → Secrets and variables → Actions`:
+### Nuvem (GitHub Actions)
 
-| Secret | Valor |
-|---|---|
-| `NBA_DB_HOST` | host do banco em nuvem |
-| `NBA_DB_PORT` | 5432 |
-| `NBA_DB_NAME` | neondb |
-| `NBA_DB_USER` | neondb_owner |
-| `NBA_DB_PASSWORD` | sua senha |
+O `daily_pipeline.yml` executa o mesmo fluxo sem depender da máquina local. Configure as credenciais em `Settings → Secrets and variables → Actions`:
+
+| Secret            | Descrição                  |
+|-------------------|----------------------------|
+| `NBA_DB_HOST`     | Host do banco em nuvem     |
+| `NBA_DB_PORT`     | `5432`                     |
+| `NBA_DB_NAME`     | Nome do banco              |
+| `NBA_DB_USER`     | Usuário do banco           |
+| `NBA_DB_PASSWORD` | Senha do banco             |
+
+---
+
+## Métricas Calculadas
+
+### Impact Score
+
+Resume o impacto do jogador em um único número ponderado:
+
+```
+(PTS×0.35) + (AST×0.20) + (REB×0.20) + (STL×0.12) + (BLK×0.08) − (TOV×0.15)
+```
+
+### True Shooting %
+
+Eficiência real de arremesso, considerando lances livres e bolas de três:
+
+```
+PTS / (2 × (FGA + 0.44 × FTA))
+```
+
+### Game Score (Hollinger)
+
+Nota geral de desempenho por jogo:
+
+```
+PTS + 0.4×FGM − 0.7×FGA − 0.4×(FTA−FTM) + 0.7×OREB + 0.3×DREB + STL + 0.7×AST + 0.7×BLK − 0.4×PF − TOV
+```
+
+Além disso: **Z-score por jogador** para detectar jogos fora da curva (threshold > 2.5) e **rolling averages** dos últimos 5 e 10 jogos para pontos, assistências, rebotes e Impact Score.
+
+---
+
+## Banco de Dados
+
+### Tabelas
+
+| Tabela                  | Descrição                                               |
+|-------------------------|---------------------------------------------------------|
+| `teams`                 | Metadata dos times                                      |
+| `players`               | Metadata dos jogadores ativos                           |
+| `games`                 | Resultado por time e jogo                               |
+| `player_gamelogs`       | Box score completo + métricas derivadas por jogo        |
+| `player_season_stats`   | Agregados da temporada por jogador                      |
+| `league_leaders`        | Snapshot dos líderes por categoria estatística          |
+
+### View
+
+- **`vw_team_performance`** — Win rate, pontuação média e saldo de pontos por time
+
+---
+
+## Dashboard
+
+Gerado pelo `generate_dashboard.py` com dados reais do banco. Abre diretamente no navegador (`nba_dashboard.html`) e contém 4 abas:
+
+| Aba          | Conteúdo                                                                                     |
+|--------------|----------------------------------------------------------------------------------------------|
+| **Overview** | KPIs gerais, top 50 por Impact Score e classificação por tier (Elite / High Impact / Consistent / Developing) |
+| **Players**  | Perfil individual com radar chart e tendência de forma                                        |
+| **Teams**    | Ranking por win rate, pontuação média e saldo de pontos                                       |
+| **Trends**   | Evolução mensal e distribuição de Impact Score ao longo da temporada                          |
+
+---
+
+## Queries Prontas
+
+`analytics_queries.sql` contém 10 queries para uso imediato no banco ou em qualquer ferramenta de BI:
+
+| # | Query                                                                 |
+|---|-----------------------------------------------------------------------|
+| 1 | Top 20 por Impact Score (mín. 10 jogos)                               |
+| 2 | Evolução de pontos — rolling 5 e 10 dos top 10                        |
+| 3 | Home vs. away por time                                                |
+| 4 | Jogos fora da curva — Z-score > 2.5                                   |
+| 5 | True Shooting Top 30 (mín. 15 jogos)                                  |
+| 6 | Ranking de times na temporada                                         |
+| 7 | Quadrante consistência vs. produção (Elite / High Impact / Consistent / Developing) |
+| 8 | Head-to-head entre dois jogadores                                     |
+| 9 | Melhores jogos individuais por Game Score                             |
+|10 | Tendência mensal dos top 5                                            |
+
+---
+
+## Diagrama de Arquitetura
+
+```mermaid
+flowchart TB
+    subgraph Fonte
+        API[API Oficial NBA]
+    end
+
+    subgraph Transformação
+        E[extract_data.py]
+        C[clean_data.py]
+        T[transform_data.py]
+    end
+
+    subgraph Armazenamento
+        direction TB
+        DB[(PostgreSQL)]
+        TB1[player_gamelogs]
+        TB2[player_season_stats]
+        TB3[league_leaders]
+        TB4[teams / players / games]
+        VW[vw_team_performance]
+    end
+
+    subgraph Entrega
+        D[generate_dashboard.py]
+        HTML[nba_dashboard.html]
+    end
+
+    subgraph Orquestração
+        S[scheduler.py]
+        GA[GitHub Actions]
+    end
+
+    API --> E --> C --> T --> DB
+    DB --> TB1 & TB2 & TB3 & TB4 --> VW
+    DB --> D --> HTML
+    S --> E
+    GA --> E
+```
 
 ---
 
 ## Stack
 
-| | |
-|---|---|
-| Python 3.11 | linguagem principal |
-| nba_api | fonte de dados |
-| pandas + numpy | transformação |
-| scipy | Z-score / outliers |
-| PostgreSQL 16 | banco de dados |
-| SQLAlchemy | conexão e upsert |
-| APScheduler | agendamento local |
-| GitHub Actions | automação na nuvem |
+| Tecnologia        | Uso                              |
+|-------------------|----------------------------------|
+| Python 3.11       | Linguagem principal              |
+| nba_api           | Fonte de dados oficial           |
+| pandas + numpy    | Transformação de dados           |
+| scipy             | Z-score e detecção de outliers   |
+| PostgreSQL 16     | Banco de dados                   |
+| SQLAlchemy        | Conexão e upsert                 |
+| APScheduler       | Agendamento local                |
+| GitHub Actions    | Automação na nuvem               |
